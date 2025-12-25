@@ -45,7 +45,7 @@ env_vars: |
 ```
 
 > [!WARNING] > **TARGET_LABEL の注意点:**
-> ローカル検証で判明した **「Label ID (例: Label_4713097559777965986)」** を設定することを推奨します。
+> ローカル検証で判明した **「Label ID (例: your-label-id)」** を設定することを推奨します。
 > 単なる名前（`TARGET`）だと、Gmail API が認識できない場合があります。
 
 ---
@@ -65,7 +65,7 @@ Cloud Run が「全てのメール」で起動してしまうのを防ぎ、「�
 
 # 良い例（TARGETラベルがついたものだけ通知）
 # ※ check_labels.py で確認したIDを使ってください
-WATCH_LABEL_IDS = ['Label_4713097559777965986']
+WATCH_LABEL_IDS = ['your-label-id']
 ```
 
 3.  設定を反映させるためにスクリプトを実行します。
