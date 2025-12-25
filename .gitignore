@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Environment Variables & Secrets (IMPORTANT)
+.env
+credentials.json
+client_secret_*.json
+
+# Local Emulation Artifacts
+local_storage/
+local_bq_log.jsonl
+watch_gmail.py
+setup_watch.py
+setup_scheduler.sh
+setup_watch.py
+setup_scheduler.sh
+
+# OS
+.DS_Store

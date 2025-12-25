@@ -1,0 +1,44 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  SERVICE_NAME: invoice-processor
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: "read"
+      id-token: "write"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 認証: Service Account Key (JSON) を使用
+      - name: Google Auth
+        uses: "google-github-actions/auth@v2"
+        with:
+          credentials_json: "${{ secrets.GCP_SA_KEY }}"
+
+      # デプロイ: ソースコードから直接ビルド & デプロイ
+      - name: Deploy to Cloud Run
+        uses: "google-github-actions/deploy-cloudrun@v2"
+        with:
+          service: ${{ env.SERVICE_NAME }}
+          region: asia-northeast1
+          source: .
+          env_vars: |
+            APP_ENV=production
+            GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }}
+            TARGET_LABEL=TARGET
+            GMAIL_CLIENT_ID=${{ secrets.GMAIL_CLIENT_ID }}
+            GMAIL_CLIENT_SECRET=${{ secrets.GMAIL_CLIENT_SECRET }}
+            GMAIL_REFRESH_TOKEN=${{ secrets.GMAIL_REFRESH_TOKEN }}
+            ALLOWED_DOMAINS=${{ secrets.ALLOWED_DOMAINS }}
+            SUBJECT_KEYWORDS=${{ secrets.SUBJECT_KEYWORDS }}
