@@ -5,6 +5,8 @@ from pydantic import BaseModel
 from services.locking import lock_and_get_messages
 from services.processor import process_email_task
 import services.gmail
+import services.slack
+import report_daily
 import config
 
 # Logging Setup
@@ -69,12 +71,38 @@ async def refresh_watch_subscription():
         }
         
         response = srv.users().watch(userId='me', body=request).execute()
-        logger.info(f"Gmail Watch設定を更新しました。History ID: {response.get('historyId')}")
-        return {"status": "ok", "historyId": response.get("historyId")}
+        history_id = response.get('historyId')
+        logger.info(f"Gmail Watch設定を更新しました。History ID: {history_id}")
+        
+        # 成功通知
+        services.slack.send_slack_alert(
+            f"Gmail Watch更新成功 ✅\nHistory ID: `{history_id}`",
+            level="success"
+        )
+        
+        return {"status": "ok", "historyId": history_id}
         
     except Exception as e:
-        logger.error(f"Gmail Watch設定の更新に失敗しました: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        error_msg = str(e)
+        logger.error(f"Gmail Watch設定の更新に失敗しました: {error_msg}")
+        
+        # エラー通知 (OAuth問題の可能性を含む)
+        alert_msg = f"Gmail Watch更新失敗 🚨\n```{error_msg}```"
+        if "invalid_grant" in error_msg.lower() or "token" in error_msg.lower():
+            alert_msg += "\n\n*⚠️ OAuthトークンが無効化された可能性があります。手動でのトークン再取得が必要です。*"
+        
+        services.slack.send_slack_alert(alert_msg, level="error")
+        raise HTTPException(status_code=500, detail=error_msg)
+
+@app.post("/report")
+async def trigger_daily_report(background_tasks: BackgroundTasks):
+    """
+    Cloud Scheduler から毎日叩かれるエンドポイント(その2)。
+    日次レポートを作成してSlackに送信します。
+    """
+    logger.info("日次レポート送信タスクを受け付けました。")
+    background_tasks.add_task(report_daily.send_daily_report)
+    return {"status": "accepted", "message": "Report generation started in background."}
 
 if __name__ == "__main__":
     import uvicorn

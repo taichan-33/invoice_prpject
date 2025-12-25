@@ -36,40 +36,54 @@ sequenceDiagram
     participant Scheduler as Cloud Scheduler<br>(Daily Maintenance)
     participant GCS as Cloud Storage<br>(Archive)
     participant BQ as BigQuery<br>(Log)
+    participant Slack as Slack (Alerts)
     actor Emp as 従業員 (Sheets)
 
-    %% --- 1. 定期メンテナンス (通知設定の維持) ---
+    %% --- 1. 定期メンテナンス & レポート ---
     rect rgb(240, 240, 240)
-        Note over Scheduler, Gmail: 【裏方】1日1回: 通知設定の更新
-        Scheduler->>CR: 1. POST /refresh-watch
-        CR->>Gmail: 2. watch() 設定更新 (有効期限延長)
-        Gmail-->>CR: OK (History ID)
-        CR-->>Scheduler: 200 OK
+        Note over Scheduler, Gmail: 【裏方】1日1回: メンテナンス & レポート
+        Scheduler->>CR: POST /refresh-watch
+        CR->>Gmail: watch() 設定更新
+        CR->>Slack: 更新成功/失敗通知
+        Scheduler->>CR: POST /report
+        CR->>BQ: 前日処理数取得
+        CR->>Slack: 日次レポート送信
     end
 
     %% --- 2. リアルタイム処理 (本番稼働) ---
     rect rgb(230, 245, 255)
-        Note over Sender, BQ: 【メイン】リアルタイム処理 (1日3万件)
-        Sender->>Gmail: 3. 請求書受取 (Label: TARGET)
-        Gmail->>PubSub: 4. 通知送信 (Push)
-        PubSub->>CR: 5. POST / (通知)
+        Note over Sender, BQ: 【メイン】リアルタイム処理
+        Sender->>Gmail: 請求書受取
+        Gmail->>PubSub: 通知 (Push)
+        PubSub->>CR: POST /
 
         activate CR
-        CR->>Gmail: 6. メール取得 & ロック (UNREAD削除)
+        CR->>Gmail: ロック & 詳細取得
 
-        loop 取得したメールの処理
-            CR->>CR: 添付ファイル抽出
-            CR->>GCS: 7. ファイル保存
-            CR->>BQ: 8. ログ記録 (Insert)
+        opt エラー発生時
+            CR->>Slack: 閾値アラート (エラー率 > 5%)
         end
 
-        CR-->>PubSub: 9. 200 OK
+        CR->>GCS: ファイル保存
+        CR->>BQ: ログ記録
         deactivate CR
     end
-
-    Emp->>BQ: 10. データ参照
-    Emp->>GCS: 11. ファイル閲覧
 ```
+
+### 2.2 監視・通知設計 (Dual Monitoring)
+
+システムの安定稼働を保証するため、**二重の監視体制**を導入しています。
+
+1.  **日次レポート (Daily Report)**
+
+    - **タイミング:** 毎朝 09:00
+    - **内容:** 昨日の全処理成功件数、現在の未解決エラー件数。
+    - **目的:** 毎日の稼働状況を正確に把握する。
+
+2.  **閾値アラート (Threshold Alert)**
+    - **タイミング:** エラー発生時（即時）
+    - **トリガー:** 直近 1 時間のエラー率が **5%** を超えた場合。
+    - **目的:** システム障害や認証切れなどの緊急事態を早期に検知する（1 時間のクールダウン付き）。
 
 ---
 

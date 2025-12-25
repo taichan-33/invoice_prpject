@@ -7,26 +7,32 @@ logger = logging.getLogger(__name__)
 
 def lock_and_get_messages() -> List[Dict[str, Any]]:
     """
-    【Claim Check パターン】の実装:
+    【Claim Check パターン】の実装 (Label版):
     
-    1. 検索: 「TARGET」ラベルかつ「未読」のメールを探します。
-    2. ロック: 見つかったメールから「未読」ラベルを外します（これで他プロセスからは見えなくなります）。
-    3. 返却: ロックに成功したメールだけをリストとして返します。
+    1. 検索: 「TARGET」ラベルがあり、かつ「PROCESSED」ラベルが無いメールを探します。
+       (未読/既読は気にしません)
+    2. ロック: 見つかったメールに「PROCESSED」ラベルを付与します。
+    3. 返却: ラベル付与に成功したメールを返します。
     
     Returns:
-        List[Dict]: 処理対象となるメールのリスト(Gmail APIのメッセージオブジェクト)
+        List[Dict]: 処理対象となるメールのリスト
     """
     locked_messages = []
     
     try:
         srv = services.gmail.get_gmail_service()
         
-        # --- 1. 検索 (Search) ---
-        # 自分(me)のメールボックスから、指定ラベル & 未読 のものを探す
+        # 処理済みラベルのIDを取得（なければ作る）
+        processed_label_id = services.gmail.get_or_create_label_id(config.PROCESSED_LABEL_NAME)
+        
+        # 1. 検索 (Claim Check)
+        # TARGETラベルがあり、かつ「処理済み」でも「エラー」でもないメールを検索
+        query = f"label:{config.TARGET_LABEL} -label:{config.PROCESSED_LABEL_NAME} -label:{config.ERROR_LABEL_NAME}"
+        
         results = srv.users().messages().list(
             userId='me',
-            labelIds=[config.TARGET_LABEL, 'UNREAD'],
-            maxResults=10 # 一度に処理する最大件数
+            q=query,
+            maxResults=10
         ).execute()
         
         messages = results.get('messages', [])
@@ -38,18 +44,22 @@ def lock_and_get_messages() -> List[Dict[str, Any]]:
         for msg in messages:
             msg_id = msg['id']
             try:
-                # 未読ラベル(UNREAD)を外すことで「処理中」または「処理済み」状態にする
+                # 処理済みラベル(PROCESSED)を付与することで「ロック」とする
+                # ついでに未読(UNREAD)も外してあげる（親切心）
                 srv.users().messages().modify(
                     userId='me',
                     id=msg_id,
-                    body={'removeLabelIds': ['UNREAD']}
+                    body={
+                        'addLabelIds': [processed_label_id],
+                        'removeLabelIds': ['UNREAD']
+                    }
                 ).execute()
                 
-                logger.info(f"メッセージをロックしました: {msg_id}")
+                logger.info(f"メッセージをロック(処理済ラベル付与)しました: {msg_id}")
                 locked_messages.append(msg)
                 
             except Exception as e:
-                # 競合などでロック失敗（既に誰かが処理したなど）の場合はスキップ
+                # 競合などで失敗した場合はスキップ
                 logger.warning(f"メッセージ {msg_id} のロックに失敗しました: {e}")
                 continue
                 

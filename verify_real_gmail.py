@@ -27,8 +27,8 @@ async def run_real_gmail_verification():
     
     # Simulate a Pub/Sub trigger
     # The data doesn't strictly matter because our Claim Check logic ignores the ID in the notification 
-    # and goes to fetch 'label:TARGET is:unread' directly.
-    # HOWEVER, you must have an unread email with label 'TARGET' in your inbox.
+    # and goes to fetch 'label:TARGET -label:INVOICE_PROCESSED' directly.
+    # HOWEVER, you must have a target email (without processed label) in your inbox.
     
     body = PubSubBody(
         message=PubSubMessage(data="e30=", messageId="trigger_1"), # {} base64
@@ -49,7 +49,7 @@ async def run_real_gmail_verification():
             await task()
         print(">>> 完了しました。 'local_storage/' フォルダと 'local_bq_log.jsonl' を確認してください。")
     else:
-        print(">>> メール処理なし。 ('TARGET' ラベルが付いた未読メールはありましたか？)")
+        print(">>> メール処理なし。 ('TARGET' ラベルが付いた未処理メールはありましたか？)")
 
 if __name__ == "__main__":
     asyncio.run(run_real_gmail_verification())

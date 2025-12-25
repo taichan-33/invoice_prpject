@@ -169,29 +169,31 @@ python3 verify_real_gmail.py
 
 Cloud Run へのデプロイ完了後、Gmail の受信をトリガーにする設定を行います。
 
-### 9.1 Pub/Sub トピックの作成
+### 9. 本番環境の Pub/Sub 連携設定 (自動化スクリプト)
 
-1.  GCP コンソールの「**Pub/Sub**」>「**トピック**」を開きます。
-2.  「**トピックを作成**」をクリックし、ID に `gmail-notification` (任意) と入力して作成します。
+Cloud Run へのデプロイ完了後、以下のスクリプトを実行して Gmail 通知設定とエラーハンドリング (DLQ) 用のインフラを構築します。
 
-### 9.2 Gmail に権限を付与
+1.  `setup_pubsub.sh` を開き、以下の変数をあなたの環境に合わせて編集します。
 
-Gmail サービスがこのトピックに通知を送れるように権限を与えます。
+    - `PROJECT_ID`: プロジェクト ID
+    - `SERVICE_URL`: Cloud Run の URL
+    - `SERVICE_ACCOUNT_EMAIL`: Cloud Scheduler 用に作成した SA (または新しい SA)
 
-1.  作成したトピックの「**権限 (Permissions)**」タブを開きます。
-2.  「**プリンシパルを追加**」をクリックします。
-3.  新しいプリンシパルに `gmail-api-push@system.gserviceaccount.com` と入力します。
-4.  ロールに「**Pub/Sub パブリッシャー (Pub/Sub Publisher)**」を選択して保存します。
+2.  スクリプトを実行します。
 
-### 9.3 Cloud Run への Push サブスクリプション作成
+```bash
+chmod +x setup_pubsub.sh
+./setup_pubsub.sh
+```
 
-トピックに来た通知を Cloud Run に転送する設定です。
+これにより、以下のリソースが自動作成されます。
 
-1.  作成したトピックの詳細画面で「**サブスクリプションを作成**」をクリックします。
-2.  **ID:** `push-to-cloudrun` (任意)
-3.  **配信タイプ:** 「**プッシュ (Push)**」を選択します。
-4.  **エンドポイント URL:** デプロイした Cloud Run の URL (末尾のスラッシュは不要)
-5.  作成ボタンをクリックします。
+- `gmail-notification` (Main Topic)
+- `push-to-cloudrun` (Main Subscription / Push / **DLQ 有効**)
+- `gmail-notification-dlq` (Dead Letter Topic)
+- `pull-dlq` (Failed Message Inspection Subscription)
+
+### 9.4 Gmail Watch の実行 (通知の開始)
 
 ### 9.4 Gmail Watch の実行 (通知の開始)
 

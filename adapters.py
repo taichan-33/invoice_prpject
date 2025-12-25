@@ -30,6 +30,13 @@ class BigQueryAdapter(ABC):
         """
         pass
 
+    @abstractmethod
+    def get_processed_count(self, target_date_iso: str) -> int:
+        """
+        Returns the number of processed items for a given date (YYYY-MM-DD).
+        """
+        pass
+
 # --- GCP Implementations ---
 
 class GCPStorageAdapter(StorageAdapter):
@@ -52,6 +59,19 @@ class GCPBigQueryAdapter(BigQueryAdapter):
 
     def insert_rows(self, table_id: str, rows: List[dict], row_ids: Optional[List[str]] = None) -> List[dict]:
         return self.client.insert_rows_json(table_id, rows, row_ids=row_ids)
+
+    def get_processed_count(self, target_date_iso: str) -> int:
+        import config
+        query = f"""
+            SELECT COUNT(*) as count
+            FROM `{config.BQ_TABLE_ID}`
+            WHERE DATE(processed_at) = '{target_date_iso}'
+        """
+        job = self.client.query(query)
+        result = job.result()
+        for row in result:
+            return row.count
+        return 0
 
 # --- Local Emulation Implementations ---
 
@@ -97,6 +117,26 @@ class LocalBigQueryAdapter(BigQueryAdapter):
         except Exception as e:
             logger.error(f"[ローカルエミュレーション] BQログの書き込みに失敗しました: {e}")
             return [{"error": str(e)}]
+
+    def get_processed_count(self, target_date_iso: str) -> int:
+        if not os.path.exists(self.log_file):
+            return 0
+        
+        count = 0
+        try:
+            with open(self.log_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        record = json.loads(line)
+                        # data.processed_at をチェック
+                        processed_at = record.get('data', {}).get('processed_at', '')
+                        if processed_at.startswith(target_date_iso):
+                            count += 1
+                    except:
+                        pass
+        except Exception as e:
+            logger.error(f"[ローカルエミュレーション] ログ読み込みエラー: {e}")
+        return count
 
 def import_datetime():
     import datetime
