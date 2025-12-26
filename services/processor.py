@@ -1,6 +1,7 @@
 import base64
 import datetime
 import logging
+import os
 from typing import List, Optional, Dict, Any
 
 import services.gmail
@@ -36,7 +37,7 @@ def process_email_task(message_data: dict):
         
         # --- 2. 安全性フィルタリング ---
         # 許可されていない送信者や件名の場合はスキップ
-        if not is_allowed_email(email.sender, email.subject):
+        if not is_allowed_email(email.sender_address, email.subject):
             logger.info(f"メッセージ {msg_id} をスキップ: フィルターポリシーによりブロックされました。")
             return
         
@@ -77,9 +78,13 @@ def process_email_task(message_data: dict):
             row = {
                 "message_id": msg_id,
                 "received_at": email.received_at.isoformat(),
-                "sender_address": email.sender,
+                "sender_name": email.sender_name,           # 送信者名(New)
+                "sender_address": email.sender_address,     # アドレス(New)
                 "subject": email.subject,
                 "filename": att.filename,
+                "file_size_bytes": att.size,                # サイズ(New)
+                "content_type": att.mime_type,              # MIME(New)
+                "extension": os.path.splitext(att.filename)[1].lower(), # 拡張子(New)
                 "gcs_url": gcs_url,
                 "gcs_path": f"gs://{bucket_name}/{blob_path}",
                 "processed_at": datetime.datetime.now().isoformat()

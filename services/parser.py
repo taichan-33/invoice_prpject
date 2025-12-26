@@ -1,3 +1,4 @@
+import email.utils
 import base64
 import datetime
 import logging
@@ -12,13 +13,14 @@ class Attachment:
     filename: str
     mime_type: str
     size: int
-    data_base64: Optional[str] = None # data is separate, usually fetched later, but 'data' field might cover it if small
+    data_base64: Optional[str] = None 
 
 @dataclass
 class Email:
     id: str
     subject: str
-    sender: str
+    sender_name: str
+    sender_address: str
     received_at: datetime.datetime
     attachments: List[Attachment]
 
@@ -59,7 +61,15 @@ def parse_message_detail(msg_detail: Dict[str, Any]) -> Email:
     
     # 基本情報の抽出
     subject = _get_header_value(headers, 'Subject', '(件名なし)')
-    sender = _get_header_value(headers, 'From', '(送信元不明)')
+    
+    # 送信者情報のパース (From: "Amazon <info@amazon.co.jp>" -> name="Amazon", addr="info@amazon.co.jp")
+    raw_sender = _get_header_value(headers, 'From', '(送信元不明)')
+    sender_name, sender_address = email.utils.parseaddr(raw_sender)
+    
+    # 名前が空の場合はアドレスを名前にする (検索のため)
+    if not sender_name:
+        sender_name = sender_address
+
     received_at = _parse_gmail_date(msg_detail.get('internalDate', '0'))
     
     # 添付ファイルの抽出
@@ -77,7 +87,8 @@ def parse_message_detail(msg_detail: Dict[str, Any]) -> Email:
     return Email(
         id=msg_id,
         subject=subject,
-        sender=sender,
+        sender_name=sender_name,
+        sender_address=sender_address,
         received_at=received_at,
         attachments=attachments
     )

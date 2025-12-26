@@ -94,19 +94,22 @@ erDiagram
     invoice_log {
         STRING message_id PK "Gmail Message ID (重複排除の主キー)"
         TIMESTAMP received_at FK "受信日時 (パーティション分割キー)"
+
+        STRING sender_name "送信者名 (例: Amazon)"
         STRING sender_address FK "送信元アドレス (クラスタリングキー)"
         STRING subject FK "件名 (クラスタリングキー)"
+        STRING extension FK "拡張子 (例: .pdf)"
 
-        STRING event_id "Pub/Sub Message ID (追跡用)"
-        STRING attachment_id "添付ファイルID"
-        STRING sender_name "送信者名"
         STRING filename "ファイル名"
         INT64 file_size_bytes "ファイルサイズ(Byte)"
         STRING content_type "MIMEタイプ"
+
         STRING gcs_path "システム用パス (gs://...)"
         STRING gcs_url "閲覧用リンク (https://...)"
-        TIMESTAMP processed_at "処理実行日時"
-        STRING app_version "処理バージョン"
+        STRING processed_at "処理実行日時"
+
+        STRING event_id "Pub/Sub Message ID"
+        STRING attachment_id "添付ファイルID"
     }
 ```
 

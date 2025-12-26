@@ -153,17 +153,74 @@ python3 verify_real_gmail.py
 
 成功すると、Gmail 上の該当メールの既読化が行われ、ローカルの `local_storage/` にファイルが保存されます。
 
-## 8. コスト最適化プラン (BigQuery)
+## 8. コスト最適化プラン & テーブル作成 (BigQuery)
 
 本システムのような「ログ記録」用途における、BigQuery の推奨設定です。
+
+### 8.1 テーブル作成コマンド (推奨設定)
+
+以下のコマンドを実行して、パーティショニング(日付分割)とクラスタリング(高速検索)が効いたテーブルを作成します。
+これを行うことで、**クエリ料金を数百分の一に抑えつつ、爆速で検索**できるようになります。
+
+```bash
+# データセット作成 (未作成の場合)
+bq mk --location=asia-northeast1 invoice_data
+
+# テーブル作成 (スキーマ定義 + 最適化設定)
+bq mk --table \
+  --location=asia-northeast1 \
+  --time_partitioning_field=received_at \
+  --time_partitioning_type=DAY \
+  --clustering_fields="sender_address,subject,extension" \
+  invoice_data.invoice_log \
+  message_id:STRING,\
+received_at:TIMESTAMP,\
+sender_name:STRING,\
+sender_address:STRING,\
+subject:STRING,\
+extension:STRING,\
+filename:STRING,\
+file_size_bytes:INTEGER,\
+content_type:STRING,\
+gcs_path:STRING,\
+gcs_url:STRING,\
+processed_at:TIMESTAMP,\
+event_id:STRING,\
+attachment_id:STRING
+```
+
+### 8.2 コスト最適化のポイント
 
 1.  **オンデマンド料金（推奨）**
     - データ量は非常に小さいため、月額定額（Slot）よりもオンデマンド（従量課金）が圧倒的に安価です。
     - **無料枠:** 毎月 1TB までのクエリ、10GB までのストレージが無料です。請求書ログ程度であれば、この無料枠内に収まる可能性が高いです。
-2.  **パーティショニングの設定**
-    - テーブル作成時、`received_at` (日付) などで「パーティション分割」を行うことを推奨します。これにより、特定の日付範囲をクエリする際に読み込み量を削減でき、コストを抑えられます。
-3.  **テーブル有効期限の設定**
+2.  **テーブル有効期限の設定**
     - ログを永久保存する必要がない場合、データセットまたはテーブルに「有効期限（例: 3 年）」を設定することで、古いデータが自動削除され、ストレージコストの増大を防げます。
+
+### 8.3 自動バックアップ設定 (推奨)
+
+BigQuery 上のデータを誤操作から守るため、1 日 1 回バックアップテーブルへデータをコピーする「定期クエリ」の設定を推奨します。
+
+**1. バックアップ用テーブルの作成 (初回のみ)**
+
+```bash
+# 本番テーブルと同じ構造で空のテーブルを作成
+bq query --use_legacy_sql=false \
+"CREATE TABLE invoice_data.invoice_log_backup LIKE invoice_data.invoice_log"
+```
+
+**2. 定期クエリ (Scheduled Query) の設定**
+BigQuery コンソールの「スケジュールされたクエリ」から、以下の SQL を **毎日 00:00** に実行するよう設定します。
+
+```sql
+INSERT INTO `プロジェクトID.invoice_data.invoice_log_backup`
+SELECT *
+FROM `プロジェクトID.invoice_data.invoice_log`
+# 日本時間で「昨日」のデータだけを抽出してコピー
+WHERE DATE(received_at, 'Asia/Tokyo') = DATE_SUB(CURRENT_DATE('Asia/Tokyo'), INTERVAL 1 DAY)
+```
+
+これにより、サーバーレス＆追加コストほぼゼロで永久バックアップが構築できます。
 
 ## 9. 本番環境の Pub/Sub 連携設定
 

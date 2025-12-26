@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 
 # --- 設定値 ---
 ERROR_RATE_THRESHOLD = 0.05  # 5%を超えたらアラート
-CHECK_WINDOW_SECONDS = 3600  # 1時間のウィンドウ
-ALERT_COOLDOWN_SECONDS = 3600  # アラート後1時間はクールダウン
+CHECK_WINDOW_SECONDS = 1800  # 30分のウィンドウ
+ALERT_COOLDOWN_SECONDS = 1800  # アラート後30分はクールダウン
 
 # --- 内部状態 ---
 _lock = threading.Lock()
