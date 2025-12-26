@@ -15,3 +15,9 @@ local_bq_log.jsonl
 
 # OS
 .DS_Store
+
+# Testing
+.pytest_cache/
+
+# OAuth token cache (if not using env vars)
+token.json

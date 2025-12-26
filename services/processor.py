@@ -52,7 +52,7 @@ def process_email_task(message_data: dict):
         bucket_name = config.BUCKET_NAME_TEMPLATE.format(config.PROJECT_ID)
 
         # --- 5. 文書の保存 & ログ記録 ---
-        for att in email.attachments:
+        for i, att in enumerate(email.attachments):
             # 添付ファイルの実データをダウンロード
             # (Emailオブジェクトにはメタデータしか入っていないため)
             att_data_res = srv.users().messages().attachments().get(
@@ -63,8 +63,13 @@ def process_email_task(message_data: dict):
             file_data = base64.urlsafe_b64decode(att_data_res['data'].encode('UTF-8'))
             
             # GCS (またはローカル) へアップロード
-            # 保存パス形式: YYYY/MM/DD/メッセージID_ファイル名
-            blob_path = f"{email.received_at.strftime('%Y/%m/%d')}/{msg_id}_{att.filename}"
+            # 保存パス形式:
+            # - 1つのみ: YYYY/MM/DD/メッセージID_ファイル名 (互換性維持)
+            # - 複数あり: YYYY/MM/DD/メッセージID_連番_ファイル名 (重複回避)
+            if len(email.attachments) > 1:
+                blob_path = f"{email.received_at.strftime('%Y/%m/%d')}/{msg_id}_{i+1}_{att.filename}"
+            else:
+                blob_path = f"{email.received_at.strftime('%Y/%m/%d')}/{msg_id}_{att.filename}"
             
             gcs_url = storage_adapter.save_file(
                 bucket_name=bucket_name,
@@ -90,8 +95,11 @@ def process_email_task(message_data: dict):
                 "processed_at": datetime.datetime.now().isoformat()
             }
             
-            # 重複挿入の防止キー (メッセージID + ファイル名)
-            insert_id = f"{msg_id}_{att.filename}"
+            # 重複挿入の防止キー
+            if len(email.attachments) > 1:
+                insert_id = f"{msg_id}_{i+1}_{att.filename}"
+            else:
+                insert_id = f"{msg_id}_{att.filename}"
             errors = bq_adapter.insert_rows(config.BQ_TABLE_ID, [row], row_ids=[insert_id])
             
             if errors:
@@ -99,6 +107,20 @@ def process_email_task(message_data: dict):
             else:
                 logger.info(f"BigQuery に挿入しました: {insert_id}")
     
+        # 6. ラベル変更（成功時：TARGET削除、PROCESSED追加）
+        try:
+            processed_label_id = services.gmail.get_or_create_label_id(config.PROCESSED_LABEL_NAME)
+            target_label_id = services.gmail.get_or_create_label_id(config.TARGET_LABEL)
+            
+            body = {
+                'addLabelIds': [processed_label_id],
+                'removeLabelIds': [target_label_id]
+            }
+            srv.users().messages().modify(userId='me', id=msg_id, body=body).execute()
+            logger.info(f"ラベルを変更しました: {config.TARGET_LABEL} -> {config.PROCESSED_LABEL_NAME}")
+        except Exception as label_err:
+             logger.error(f"成功ラベルの付与に失敗しましたが、処理自体は完了しています: {label_err}")
+
         # 成功を記録（閾値監視用）
         services.error_monitor.record_success()
 

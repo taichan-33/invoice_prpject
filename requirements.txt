@@ -8,4 +8,5 @@ google-auth==2.41.1
 google-auth-httplib2==0.3.0
 python-dotenv==1.2.1
 google-auth-oauthlib==1.2.3
-requests==2.32.3
+requests==2.32.3pytest
+pytest-mock

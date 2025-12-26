@@ -10,8 +10,38 @@ env:
   SERVICE_NAME: invoice-processor
 
 jobs:
-  deploy:
+  # 1. テストジョブ (デプロイ前に必ず実行)
+  test:
+    name: Run Tests
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Pytest
+        env:
+          # テスト用のダミー環境変数 (外部アクセスしないため値は何でもOK)
+          APP_ENV: test
+          GOOGLE_CLOUD_PROJECT: test-project
+          SLACK_WEBHOOK_URL: https://hooks.slack.com/services/test/test/test
+        run: pytest tests/
+
+  # 2. デプロイジョブ (テスト成功時のみ実行)
+  deploy:
+    name: Deploy to Cloud Run
+    runs-on: ubuntu-latest
+    needs: test # テスト成功を必須にする
+    if: github.ref == 'refs/heads/main' # mainブランチのみデプロイ
     permissions:
       contents: "read"
       id-token: "write"
